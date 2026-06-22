@@ -36,6 +36,7 @@ SKILLZ_REF=refs/heads/foo ./install.sh  # explicit ref without rewriting
 ## Skills Provided
 
 - **`polyglot-scaffold`** — Scaffold a Rust + Python + TypeScript monorepo (PyO3/maturin + napi-rs) from a runnable template. See [.agents/skills/polyglot-scaffold/SKILL.md](.agents/skills/polyglot-scaffold/SKILL.md).
+- **`build-scripts`** — Structure build, lint, typecheck, and test scripts across npm/pnpm, Makefiles, and Python invoke using a hierarchical task convention. See [.agents/skills/build-scripts/SKILL.md](.agents/skills/build-scripts/SKILL.md).
 
 ## Development
 
