@@ -1,0 +1,21 @@
+[workspace]
+members = [
+    "src/rust-myplaceholder-project",
+    "src/python-myplaceholder-project",
+    "src/node-myplaceholder-project",
+]
+default-members = [
+    "src/rust-myplaceholder-project",
+    "src/node-myplaceholder-project",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3

@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+.venv/
+uv.lock
+.pytest_cache/
+.coverage
+htmlcov/
+
+# polyglot-scaffold template build artifacts
+.agents/skills/polyglot-scaffold/template/target/
+.agents/skills/polyglot-scaffold/template/node_modules/
+.agents/skills/polyglot-scaffold/template/src/python-myplaceholder-project/.venv/
+.agents/skills/polyglot-scaffold/template/src/node-myplaceholder-project/node_modules/
+.agents/skills/polyglot-scaffold/template/src/node-myplaceholder-project/dist/
+.agents/skills/polyglot-scaffold/template/src/node-myplaceholder-project/*.node
+.agents/skills/polyglot-scaffold/template/src/node-myplaceholder-project/binding.js
+.agents/skills/polyglot-scaffold/template/src/node-myplaceholder-project/binding.d.ts

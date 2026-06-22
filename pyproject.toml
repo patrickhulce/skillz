@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=64", "setuptools-scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "skillz"
+description = "Install agent skills from skillz into ~/.agents/skills/ or a repo."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Patrick Hulce", email = "patrick.hulce@gmail.com" }]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/patrickhulce/skillz"
+
+[project.scripts]
+skillz = "skillz.install:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.8",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools_scm]
+fallback_version = "0.0.0"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+cache-dir = ".ruff_cache"
+line-length = 140
+
+[tool.ruff.lint]
+extend-select = ["I"]

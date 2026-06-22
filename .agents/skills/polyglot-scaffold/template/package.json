@@ -1,0 +1,11 @@
+{
+  "name": "myplaceholder-project-root",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Polyglot bindings for myplaceholder-project",
+  "license": "MIT",
+  "scripts": {
+    "build:node": "pnpm --dir src/node-myplaceholder-project build",
+    "build": "pnpm build:node"
+  }
+}
