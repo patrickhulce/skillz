@@ -37,6 +37,13 @@ SKILLZ_REF=refs/heads/foo ./install.sh  # explicit ref without rewriting
 
 - **`polyglot-scaffold`** — Scaffold a Rust + Python + TypeScript monorepo (PyO3/maturin + napi-rs) from a runnable template. See [.agents/skills/polyglot-scaffold/SKILL.md](.agents/skills/polyglot-scaffold/SKILL.md).
 - **`build-scripts`** — Structure build, lint, typecheck, and test scripts across npm/pnpm, Makefiles, and Python invoke using a hierarchical task convention. See [.agents/skills/build-scripts/SKILL.md](.agents/skills/build-scripts/SKILL.md).
+- **`commit-it`** — Organize mixed changes into focused [scoped commits](https://scopedcommits.com/), with a safety checkpoint and a scope validator. See [.agents/skills/commit-it/SKILL.md](.agents/skills/commit-it/SKILL.md).
+- **`test-it`** — Discover the repo's real test commands (mirroring GitHub Actions), scope the run to the diff, and hand off to `dogfood-it` for docs. See [.agents/skills/test-it/SKILL.md](.agents/skills/test-it/SKILL.md).
+- **`review-it`** — Read-only pre-ship review of the diff against `main` for bugs, inconsistencies, lost comments, and API hygiene. See [.agents/skills/review-it/SKILL.md](.agents/skills/review-it/SKILL.md).
+- **`describe-it`** — Generate a structured pull request description from the branch's commits and diff. See [.agents/skills/describe-it/SKILL.md](.agents/skills/describe-it/SKILL.md).
+- **`ship-it`** — End-to-end PR workflow: scoped commits, push, PR description, open the PR with `gh`, and monitor until green. See [.agents/skills/ship-it/SKILL.md](.agents/skills/ship-it/SKILL.md).
+- **`sherpa-it`** — Diagnose and fix CI failures by inspecting GitHub Actions logs via `gh`, guiding a PR to green. See [.agents/skills/sherpa-it/SKILL.md](.agents/skills/sherpa-it/SKILL.md).
+- **`dogfood-it`** — Test docs and tutorials step-by-step, logging every error, unclear step, and workaround to `FEEDBACK.md`. See [.agents/skills/dogfood-it/SKILL.md](.agents/skills/dogfood-it/SKILL.md).
 
 ## Development
 
