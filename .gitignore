@@ -11,11 +11,11 @@ uv.lock
 htmlcov/
 
 # polyglot-scaffold template build artifacts
-.agents/skills/polyglot-scaffold/template/target/
-.agents/skills/polyglot-scaffold/template/node_modules/
-.agents/skills/polyglot-scaffold/template/src/python-myplaceholder-project/.venv/
-.agents/skills/polyglot-scaffold/template/src/node-myplaceholder-project/node_modules/
-.agents/skills/polyglot-scaffold/template/src/node-myplaceholder-project/dist/
-.agents/skills/polyglot-scaffold/template/src/node-myplaceholder-project/*.node
-.agents/skills/polyglot-scaffold/template/src/node-myplaceholder-project/binding.js
-.agents/skills/polyglot-scaffold/template/src/node-myplaceholder-project/binding.d.ts
+.agents/skills/**/*.lock
+.agents/skills/**/.venv/
+.agents/skills/**/target/
+.agents/skills/**/node_modules/
+.agents/skills/**/dist/
+.agents/skills/**/*.node
+.agents/skills/**/binding.js
+.agents/skills/**/binding.d.ts

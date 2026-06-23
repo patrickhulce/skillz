@@ -45,20 +45,53 @@ def test_template_make_all(template_pnpm_installed: None) -> None:
     assert result.returncode == 0
 
 
-def test_scaffold_make_all(template_pnpm_installed: None, tmp_path: Path) -> None:
+# Each checkpoint is one `make` target from the template's `make all` graph,
+# run separately so pytest reports incremental progress instead of one long
+# hang. `skip_prereqs` lists prerequisite targets already built by an earlier
+# checkpoint; passing them via `make -o` reuses that work instead of rebuilding.
+MAKE_CHECKPOINTS: list[tuple[str, list[str]]] = [
+    ("build-rust", []),
+    ("build-python", []),
+    ("build-node", []),
+    ("lint-rust", []),
+    ("lint-python", []),
+    ("lint-node", []),
+    ("typecheck-python", []),
+    ("typecheck-node", []),
+    ("test-rust", []),
+    ("test-python", ["build-python"]),
+    ("test-node", ["build-node"]),
+]
+
+
+@pytest.fixture(scope="module")
+def scaffolded_project(tmp_path_factory: pytest.TempPathFactory) -> Path:
     _require_tool("cargo")
     _require_tool("uv")
     _require_tool("make")
     _require_tool("pnpm")
 
-    dest = tmp_path / "muxon-test"
+    dest = tmp_path_factory.mktemp("scaffold") / "muxon-test"
     _run(
         [sys.executable, str(SCAFFOLD_SCRIPT), "--name", "muxon", "--dest", str(dest)],
         cwd=REPO_ROOT,
     )
     _run(["pnpm", "install"], cwd=dest)
-    result = _run(["make", "all"], cwd=dest, timeout=900)
-    assert result.returncode == 0
     assert (dest / "src/rust-muxon/src/lib.rs").is_file()
     assert (dest / "src/python-muxon/myplaceholder_project").exists() is False
     assert (dest / "src/python-muxon/muxon/__init__.py").is_file()
+    return dest
+
+
+@pytest.mark.parametrize(
+    ("target", "skip_prereqs"),
+    MAKE_CHECKPOINTS,
+    ids=[target for target, _ in MAKE_CHECKPOINTS],
+)
+def test_scaffold_make_target(scaffolded_project: Path, target: str, skip_prereqs: list[str]) -> None:
+    cmd = ["make"]
+    for prereq in skip_prereqs:
+        cmd += ["-o", prereq]
+    cmd.append(target)
+    result = _run(cmd, cwd=scaffolded_project, timeout=900)
+    assert result.returncode == 0
