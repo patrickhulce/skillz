@@ -36,9 +36,20 @@ from typing import Iterable
 
 DEFAULT_REPO = os.environ.get("SKILLZ_REPO", "patrickhulce/skillz")
 SKILLS_PREFIX = ".agents/skills/"
+HOOKS_PREFIX = "hooks/"
 TRAILER_MARKER = "skillz:install-metadata"
 GITHUB_API = "https://api.github.com"
 RAW_HOST = "raw.githubusercontent.com"
+CLAUDE_SETTINGS_PATH = Path.home() / ".claude" / "settings.json"
+SKILLZ_MANIFEST_PATH = Path.home() / ".claude" / "skillz_manifest.json"
+
+DESIRED_CLAUDE_SETTINGS: dict = {
+    "feedbackSurveyRate": 0,
+    "fastModePerSessionOptIn": True,
+    "model": "opus",
+    "effortLevel": "medium",
+    "permissions": {"defaultMode": "auto"},
+}
 
 TRAILER_BLOCK_RE = re.compile(
     r"<!--\s*" + re.escape(TRAILER_MARKER) + r"\s*\n(?P<body>.*?)-->",
@@ -403,6 +414,257 @@ def apply_plan(
     return installed, updated, up_to_date, skipped_conflict, failed
 
 
+def parse_frontmatter(text: str) -> tuple[dict, str]:
+    """Parse simple YAML frontmatter (---...---) from markdown text.
+
+    Handles plain ``key: value``, double/single-quoted values, and ``key: |``
+    literal block scalars.  Returns (metadata_dict, body_string).
+    """
+    if not text.startswith("---\n"):
+        return {}, text
+    try:
+        end = text.index("\n---\n", 4)
+    except ValueError:
+        return {}, text
+    front = text[4:end]
+    body = text[end + 5 :].strip()
+
+    meta: dict[str, str] = {}
+    lines = front.splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if not line.strip() or line.startswith("#"):
+            i += 1
+            continue
+        if ": " in line or line.endswith(":"):
+            key, sep, val = line.partition(": ")
+            key = key.strip()
+            val = val.strip()
+            if val == "|":
+                # literal block scalar: collect indented continuation lines
+                block: list[str] = []
+                i += 1
+                while i < len(lines) and (lines[i].startswith("  ") or lines[i].startswith("\t")):
+                    block.append(lines[i].lstrip())
+                    i += 1
+                meta[key] = "\n".join(block).rstrip("\n")
+                continue
+            # strip surrounding quotes
+            if len(val) >= 2 and val[0] == val[-1] and val[0] in ('"', "'"):
+                val = val[1:-1]
+            meta[key] = val
+        i += 1
+    return meta, body
+
+
+@dataclass
+class HookFile:
+    event: str
+    matcher: str
+    filename: str
+    repo_path: str
+
+
+def enumerate_hook_files(repo: str, tree_sha: str) -> list[HookFile]:
+    """Return all hook definition files found under hooks/ in the tree."""
+    info(f"enumerating {HOOKS_PREFIX} for Claude hook definitions")
+    data = gh_json(f"{GITHUB_API}/repos/{repo}/git/trees/{tree_sha}?recursive=1")
+    if not isinstance(data, dict) or "tree" not in data:
+        raise RuntimeError(f"unexpected tree response: {data!r}")
+
+    hook_files: list[HookFile] = []
+    for entry in data["tree"]:
+        path = entry.get("path", "")
+        if entry.get("type") != "blob":
+            continue
+        if not path.startswith(HOOKS_PREFIX):
+            continue
+        rest = path[len(HOOKS_PREFIX):]
+        parts = rest.split("/")
+        if len(parts) != 3:
+            continue
+        event, matcher, filename = parts
+        if not filename.endswith(".md"):
+            continue
+        hook_files.append(HookFile(event=event, matcher=matcher, filename=filename, repo_path=path))
+
+    ok(f"found {len(hook_files)} hook file(s)")
+    return hook_files
+
+
+def compile_hooks(repo: str, install_sha: str, hook_files: list[HookFile]) -> dict:
+    """Download and parse all hook files; return the compiled hooks dict."""
+    # Group by event → matcher → sorted files
+    grouped: dict[str, dict[str, list[HookFile]]] = {}
+    for hf in hook_files:
+        grouped.setdefault(hf.event, {}).setdefault(hf.matcher, []).append(hf)
+
+    result: dict[str, list[dict]] = {}
+    for event, matchers in sorted(grouped.items()):
+        matcher_list: list[dict] = []
+        for matcher, files in sorted(matchers.items()):
+            hooks_for_matcher: list[dict] = []
+            for hf in sorted(files, key=lambda f: f.filename):
+                url = f"https://{RAW_HOST}/{repo}/{install_sha}/{hf.repo_path}"
+                raw = http_get(url).decode("utf-8", errors="replace")
+                meta, _ = parse_frontmatter(raw)
+                if "command" not in meta:
+                    warn(f"hook file {hf.repo_path!r} missing 'command' in frontmatter; skipping")
+                    continue
+                entry: dict = {"type": meta.get("type", "command"), "command": meta["command"]}
+                if "if" in meta:
+                    entry["if"] = meta["if"]
+                hooks_for_matcher.append(entry)
+            if hooks_for_matcher:
+                matcher_list.append({"matcher": matcher, "hooks": hooks_for_matcher})
+        if matcher_list:
+            result[event] = matcher_list
+    return result
+
+
+def load_json_file(path: Path) -> dict:
+    if not path.is_file():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _hook_commands(hooks_dict: dict) -> set[str]:
+    """Return all command strings present in a compiled hooks dict."""
+    cmds: set[str] = set()
+    for matcher_list in hooks_dict.values():
+        for group in matcher_list:
+            for hook in group.get("hooks", []):
+                if "command" in hook:
+                    cmds.add(hook["command"])
+    return cmds
+
+
+def merge_hooks(
+    existing: dict,
+    desired: dict,
+    last_manifest: dict,
+    *,
+    force: bool,
+) -> dict:
+    """Merge desired hooks into existing, respecting ownership via last_manifest."""
+    if force:
+        return desired
+
+    last_commands = _hook_commands(last_manifest)
+    desired_commands = _hook_commands(desired)
+
+    # Build a mutable deep copy of existing hooks
+    merged: dict[str, list[dict]] = {}
+    for event, matcher_list in existing.items():
+        merged[event] = [
+            {"matcher": g["matcher"], "hooks": list(g.get("hooks", []))}
+            for g in matcher_list
+        ]
+
+    # Remove hooks that were in the last manifest but are no longer desired
+    for event in list(merged.keys()):
+        for group in merged[event]:
+            group["hooks"] = [
+                h for h in group["hooks"]
+                if h.get("command") not in last_commands or h.get("command") in desired_commands
+            ]
+        # Clean up empty matcher groups
+        merged[event] = [g for g in merged[event] if g["hooks"]]
+    # Remove empty event keys
+    for event in [e for e, v in merged.items() if not v]:
+        del merged[event]
+
+    # Add / update hooks from desired
+    for event, desired_matchers in desired.items():
+        for desired_group in desired_matchers:
+            matcher = desired_group["matcher"]
+            # Find or create the matcher group in merged
+            event_list = merged.setdefault(event, [])
+            existing_group = next((g for g in event_list if g["matcher"] == matcher), None)
+            if existing_group is None:
+                existing_group = {"matcher": matcher, "hooks": []}
+                event_list.append(existing_group)
+
+            for desired_hook in desired_group.get("hooks", []):
+                cmd = desired_hook.get("command")
+                if not cmd:
+                    continue
+                # Find this hook in the existing group
+                idx = next(
+                    (i for i, h in enumerate(existing_group["hooks"]) if h.get("command") == cmd),
+                    None,
+                )
+                if idx is None:
+                    # Not present — add it
+                    existing_group["hooks"].append(desired_hook)
+                elif cmd in last_commands:
+                    # We wrote it last time — update in-place
+                    existing_group["hooks"][idx] = desired_hook
+                # else: present but not ours — leave it alone
+
+    return merged
+
+
+def configure_claude_settings(
+    repo: str,
+    install_sha: str,
+    hook_files: list[HookFile],
+    *,
+    force: bool,
+    dry_run: bool,
+) -> None:
+    info("configuring Claude settings")
+    existing = load_json_file(CLAUDE_SETTINGS_PATH)
+    manifest = load_json_file(SKILLZ_MANIFEST_PATH)
+    last_settings: dict = manifest.get("settings", {})
+    last_hooks: dict = manifest.get("hooks", {})
+
+    desired_hooks = compile_hooks(repo, install_sha, hook_files)
+
+    merged = dict(existing)
+    skipped: list[str] = []
+
+    for key, desired_val in DESIRED_CLAUDE_SETTINGS.items():
+        current = existing.get(key)
+        last = last_settings.get(key)
+        if force or key not in existing or current == last:
+            merged[key] = desired_val
+        else:
+            skipped.append(key)
+
+    merged["hooks"] = merge_hooks(
+        existing.get("hooks", {}),
+        desired_hooks,
+        last_hooks,
+        force=force,
+    )
+
+    if skipped:
+        warn(f"Claude settings: skipped user-customized keys: {', '.join(skipped)} (use --force-config to overwrite)")
+
+    if dry_run:
+        ok("Claude settings: [DRY-RUN] would write merged settings (skipped: %s)" % (skipped or "none"))
+        return
+
+    # Atomic write
+    tmp = CLAUDE_SETTINGS_PATH.with_name(f".settings.skillz-new.{os.getpid()}.json")
+    CLAUDE_SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, CLAUDE_SETTINGS_PATH)
+
+    # Update manifest
+    new_manifest = dict(manifest)
+    new_manifest["settings"] = DESIRED_CLAUDE_SETTINGS
+    new_manifest["hooks"] = desired_hooks
+    SKILLZ_MANIFEST_PATH.write_text(json.dumps(new_manifest, indent=2) + "\n", encoding="utf-8")
+
+    ok("Claude settings: merged into %s" % CLAUDE_SETTINGS_PATH)
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="skillz-install",
@@ -425,6 +687,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--yes", action="store_true", help="accept default prompts; does NOT auto-overwrite conflicts")
     p.add_argument("--overwrite-conflicts", action="store_true", help="overwrite skills that lack the skillz trailer")
     p.add_argument("--dry-run", action="store_true", help="show the plan but do not download or write")
+    p.add_argument(
+        "--force-config",
+        action="store_true",
+        help="overwrite all Claude settings unconditionally, ignoring user customizations (env: SKILLZ_FORCE_CONFIG=1)",
+    )
     return p.parse_args(argv)
 
 
@@ -460,6 +727,14 @@ def main(argv: list[str] | None = None) -> int:
         overwrite_conflicts=overwrite,
         dry_run=args.dry_run,
     )
+
+    print()
+    try:
+        hook_files = enumerate_hook_files(args.repo, tree_sha)
+        force_cfg = args.force_config or bool(os.environ.get("SKILLZ_FORCE_CONFIG"))
+        configure_claude_settings(args.repo, install_sha, hook_files, force=force_cfg, dry_run=args.dry_run)
+    except RuntimeError as exc:
+        warn(f"Claude settings: {exc}")
 
     print()
     summary = f"Installed: {installed}   Updated: {updated}   Skipped (up-to-date): {up_to_date}   Skipped (conflict): {skipped_conflict}"
