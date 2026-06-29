@@ -56,6 +56,7 @@ TRAILER_BLOCK_RE = re.compile(
     re.DOTALL,
 )
 TRAILER_HASH_RE = re.compile(r"^git-hash:\s*(?P<sha>[0-9a-f]{40})\s*$", re.MULTILINE)
+TRAILER_SOURCE_RE = re.compile(r"^source:\s*(?P<url>https?://\S+)\s*$", re.MULTILINE)
 
 
 def effective_install_ref_from_env() -> str:
@@ -226,7 +227,8 @@ def choose_target(args: argparse.Namespace) -> Path:
     sys.exit(2)
 
 
-def parse_existing_trailer(skill_md: Path) -> str | None:
+def parse_existing_trailer(skill_md: Path, expected_repo: str) -> str | None:
+    """Return the git-hash from the skillz trailer, or None if absent/wrong-repo."""
     if not skill_md.is_file():
         return None
     try:
@@ -237,11 +239,18 @@ def parse_existing_trailer(skill_md: Path) -> str | None:
     if not match:
         return None
     body = match.group("body")
+    # Only claim ownership if the source URL matches our configured repo.
+    source_match = TRAILER_SOURCE_RE.search(body)
+    if not source_match:
+        return None
+    expected_url = f"https://github.com/{expected_repo}"
+    if source_match.group("url").rstrip("/") != expected_url:
+        return None  # installed by a different repo — treat as conflict
     hash_match = TRAILER_HASH_RE.search(body)
     return hash_match.group("sha") if hash_match else "unknown"
 
 
-def classify(skills: Iterable[Skill], target_dir: Path, install_sha: str) -> list[PlanEntry]:
+def classify(skills: Iterable[Skill], target_dir: Path, install_sha: str, repo: str) -> list[PlanEntry]:
     plan: list[PlanEntry] = []
     for skill in skills:
         dest = target_dir / skill.name
@@ -249,7 +258,7 @@ def classify(skills: Iterable[Skill], target_dir: Path, install_sha: str) -> lis
         if not dest.exists():
             plan.append(PlanEntry(skill=skill, classification="new", dest=dest))
             continue
-        existing = parse_existing_trailer(skill_md)
+        existing = parse_existing_trailer(skill_md, repo)
         if existing is None:
             plan.append(PlanEntry(skill=skill, classification="conflict", dest=dest))
         elif existing == install_sha:
@@ -259,26 +268,31 @@ def classify(skills: Iterable[Skill], target_dir: Path, install_sha: str) -> lis
     return plan
 
 
-def maybe_resolve_conflicts(plan: list[PlanEntry], args: argparse.Namespace) -> bool:
+def maybe_resolve_conflicts(
+    plan: list[PlanEntry],
+    *,
+    overwrite_conflicts: bool,
+    yes: bool,
+) -> bool:
     conflicts = [p for p in plan if p.classification == "conflict"]
     if not conflicts:
         return True
-    if args.overwrite_conflicts:
-        warn(f"--overwrite-conflicts; will overwrite {len(conflicts)} conflicting skill(s)")
+    if overwrite_conflicts:
+        warn(f"--overwrite=skills; will overwrite {len(conflicts)} conflicting skill(s)")
         return True
 
     print()
-    print(f"Found {len(conflicts)} existing skill(s) not installed by skillz:")
+    print(f"Found {len(conflicts)} existing skill(s) not installed by skillz (patrickhulce/skillz):")
     for p in conflicts:
         print(f"  - {p.skill.name:<32} ({p.dest})")
     print()
-    print("These may have been hand-edited. Overwriting will replace them entirely.")
+    print("These may have been hand-edited or installed from a different source. Overwriting will replace them entirely.")
 
-    if args.yes:
-        warn("--yes does not auto-overwrite conflicts; pass --overwrite-conflicts for that. Skipping conflicts.")
+    if yes:
+        warn("--yes does not auto-overwrite conflicts; pass --overwrite or --overwrite=skills for that. Skipping conflicts.")
         return False
     if not sys.stdin.isatty():
-        warn("stdin is not a tty; skipping conflicts. Pass --overwrite-conflicts to force.")
+        warn("stdin is not a tty; skipping conflicts. Pass --overwrite or --overwrite=skills to force.")
         return False
 
     answer = input("Overwrite ALL of these with skillz versions? [y/N]: ").strip().lower()
@@ -644,7 +658,7 @@ def configure_claude_settings(
     )
 
     if skipped:
-        warn(f"Claude settings: skipped user-customized keys: {', '.join(skipped)} (use --force-config to overwrite)")
+        warn(f"Claude settings: skipped user-customized keys: {', '.join(skipped)} (use --overwrite=claude or --overwrite to force)")
 
     if dry_run:
         ok("Claude settings: [DRY-RUN] would write merged settings (skipped: %s)" % (skipped or "none"))
@@ -685,13 +699,19 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="install location; defaults to user (prompts when run interactively in a git repo)",
     )
     p.add_argument("--yes", action="store_true", help="accept default prompts; does NOT auto-overwrite conflicts")
-    p.add_argument("--overwrite-conflicts", action="store_true", help="overwrite skills that lack the skillz trailer")
-    p.add_argument("--dry-run", action="store_true", help="show the plan but do not download or write")
     p.add_argument(
-        "--force-config",
-        action="store_true",
-        help="overwrite all Claude settings unconditionally, ignoring user customizations (env: SKILLZ_FORCE_CONFIG=1)",
+        "--overwrite",
+        nargs="?",
+        const="all",
+        default=None,
+        metavar="{all,skills,claude}",
+        help=(
+            "what to overwrite unconditionally: 'all' (default when flag given with no value), "
+            "'skills' (conflict skills only), or 'claude' (settings/hooks only). "
+            "Env: SKILLZ_OVERWRITE=all|skills|claude  (SKILLZ_FORCE_CONFIG=1 is a legacy alias for 'claude')"
+        ),
     )
+    p.add_argument("--dry-run", action="store_true", help="show the plan but do not download or write")
     return p.parse_args(argv)
 
 
@@ -711,14 +731,22 @@ def main(argv: list[str] | None = None) -> int:
     target_dir = choose_target(args)
     ok(f"target: {target_dir}")
 
-    plan = classify(skills, target_dir, install_sha)
+    overwrite_mode = (
+        args.overwrite
+        or os.environ.get("SKILLZ_OVERWRITE")
+        or ("claude" if os.environ.get("SKILLZ_FORCE_CONFIG") else None)
+    )
+    overwrite_conflicts = overwrite_mode in ("all", "skills")
+    force_config = overwrite_mode in ("all", "claude")
+
+    plan = classify(skills, target_dir, install_sha, args.repo)
     print()
     info("plan:")
     for p in plan:
         print(f"  - {p.skill.name:<32} {p.classification}")
     print()
 
-    overwrite = maybe_resolve_conflicts(plan, args)
+    overwrite = maybe_resolve_conflicts(plan, overwrite_conflicts=overwrite_conflicts, yes=args.yes)
 
     installed, updated, up_to_date, skipped_conflict, failed = apply_plan(
         plan,
@@ -731,8 +759,7 @@ def main(argv: list[str] | None = None) -> int:
     print()
     try:
         hook_files = enumerate_hook_files(args.repo, tree_sha)
-        force_cfg = args.force_config or bool(os.environ.get("SKILLZ_FORCE_CONFIG"))
-        configure_claude_settings(args.repo, install_sha, hook_files, force=force_cfg, dry_run=args.dry_run)
+        configure_claude_settings(args.repo, install_sha, hook_files, force=force_config, dry_run=args.dry_run)
     except RuntimeError as exc:
         warn(f"Claude settings: {exc}")
 
