@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import pytest
-
-from src.skillz.install import (
+from skillz.install import (
     PlanEntry,
     Skill,
     SkillFile,
@@ -66,12 +64,7 @@ def test_parse_trailer_correct_repo(tmp_path: Path) -> None:
 def test_parse_trailer_no_source_field(tmp_path: Path) -> None:
     # Trailer block exists but lacks a 'source:' line → treated as foreign
     skill_md = tmp_path / "SKILL.md"
-    skill_md.write_text(
-        "# Skill\n\n"
-        "<!-- skillz:install-metadata\n"
-        f"git-hash: {SHA}\n"
-        "-->\n"
-    )
+    skill_md.write_text(f"# Skill\n\n<!-- skillz:install-metadata\ngit-hash: {SHA}\n-->\n")
     assert parse_existing_trailer(skill_md, OUR_REPO) is None
 
 
@@ -135,9 +128,7 @@ def test_apply_plan_skips_conflict_by_default(tmp_path: Path) -> None:
     original_content = skill_md.read_text()
 
     entry = PlanEntry(skill=skill, classification="conflict", dest=dest)
-    installed, updated, up_to_date, skipped, failed = apply_plan(
-        [entry], OUR_REPO, SHA, overwrite_conflicts=False, dry_run=False
-    )
+    installed, updated, up_to_date, skipped, failed = apply_plan([entry], OUR_REPO, SHA, overwrite_conflicts=False, dry_run=False)
 
     assert skipped == 1
     assert installed == updated == failed == 0
@@ -153,10 +144,8 @@ def test_apply_plan_calls_stage_skill_when_overwrite_forced(tmp_path: Path) -> N
 
     entry = PlanEntry(skill=skill, classification="conflict", dest=dest)
 
-    with patch("src.skillz.install.stage_skill", side_effect=RuntimeError("mock")) as mock_stage:
-        installed, updated, up_to_date, skipped, failed = apply_plan(
-            [entry], OUR_REPO, SHA, overwrite_conflicts=True, dry_run=False
-        )
+    with patch("skillz.install.stage_skill", side_effect=RuntimeError("mock")) as mock_stage:
+        installed, updated, up_to_date, skipped, failed = apply_plan([entry], OUR_REPO, SHA, overwrite_conflicts=True, dry_run=False)
 
     mock_stage.assert_called_once()
     # stage_skill raised → counted as failed, not skipped
@@ -170,7 +159,7 @@ def test_apply_plan_dry_run_does_not_write(tmp_path: Path) -> None:
     # dest does not exist → "new"
     entry = PlanEntry(skill=skill, classification="new", dest=dest)
 
-    with patch("src.skillz.install.stage_skill") as mock_stage:
+    with patch("skillz.install.stage_skill") as mock_stage:
         apply_plan([entry], OUR_REPO, SHA, overwrite_conflicts=False, dry_run=True)
 
     mock_stage.assert_not_called()

@@ -42,5 +42,8 @@ jobs:
           uv run ruff check .
           uv run ruff format --check .
 
+      - name: Test installer
+        run: uv run pytest -vv tests/test_install.py
+
       - name: Test skill scripts
         run: uv run pytest -vv tests/test_skills.py

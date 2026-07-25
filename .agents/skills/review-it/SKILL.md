@@ -1,13 +1,13 @@
 ---
 name: review-it
-description: Inspect the diff against main to surface bugs, inconsistencies, incorrect explanations, lost explanatory comments, and light API hygiene issues before shipping. Use when the user says "review my diff before I ship", "look over my changes", "check this PR", or asks for a pre-flight code review.
+description: Inspect the diff against main to surface bugs, inconsistencies, incorrect explanations, lost explanatory comments, and light API hygiene issues before shipping, classifying every finding as P0, P1, or P2. Use when the user says "review my diff before I ship", "look over my changes", "check this PR", or asks for a pre-flight code review. Hands off to refine-it to actually apply fixes.
 ---
 
 # Code Review
 
 Audit the changes on the current branch before shipping. Catch the kind of bugs and API mistakes a careful human reviewer would catch on a PR.
 
-This skill is **read-only**. Do not commit, push, run formatters, or auto-fix anything.
+This skill is **read-only**. Do not commit, push, run formatters, or auto-fix anything. Fixing findings is **refine-it**'s job (`.agents/skills/refine-it/SKILL.md`), which consumes the report this skill produces.
 
 ## Workflow
 
@@ -44,7 +44,7 @@ For large or context-dependent changes, also read the new file contents around t
 
 ### 4. Run the review checklist
 
-Walk every changed file against this checklist. Note findings as you go.
+Walk every changed file against this checklist. Note each finding with its `path:line` and category as you go; you'll assign severity tiers in the next step.
 
 #### Correctness
 
@@ -96,61 +96,84 @@ Ignore narration-style comments that just restate the code (`# increment counter
 - New public symbols with vague names (`helper`, `process`, `do_thing`)
 - New `# type: ignore` without a specific error code
 
-### 5. Produce the review report
+### 5. Assign a severity tier to every finding
 
-Write findings directly into the chat (do not create a file). Use this structure:
+Every finding gets exactly one tier. The tier is what drives whether **refine-it** fixes it, so it matters more than the category:
+
+- **P0** — a critical bug that breaks essential functionality for a frequent or obvious use case.
+- **P1** — a bug or usage problem that might create errors in edge cases or rarer use cases.
+- **P2** — style, pattern, optimization, or a nit.
+
+Default mappings, so the tiering is repeatable across runs:
+
+| Finding                                                            | Tier |
+| ------------------------------------------------------------------ | ---- |
+| `[BUG]` on the mainline path a caller hits every time              | P0   |
+| `[BUG]` reachable only through an edge case or rare input          | P1   |
+| `[API]` break: removed/renamed export, incompatible signature      | P1   |
+| `[LOST-COMMENT]` that warned about a footgun or upstream bug       | P1   |
+| `[INCONSISTENT]` where code and its docstring/types actually clash | P1   |
+| `[DOC]` example that won't run as written                          | P1   |
+| `[DOC]` wording that is merely stale or imprecise                  | P2   |
+| `[LOST-COMMENT]` whose rationale is now obvious from the code      | P2   |
+| `[NIT]`, naming preference, or a new vague public name             | P2   |
+
+When a finding sits between tiers, ask how a caller experiences it: a wrong result on a common call is P0, a wrong result behind an unusual flag is P1, and something a reader would only notice while reading is P2.
+
+### 6. Produce the review report
+
+Write findings directly into the chat (do not create a file). Group by tier — P0 first — and tag each finding with both its tier and its category:
 
 ```markdown
 ## Pre-Ship Review
 
 **Scope:** <N> commits, <M> files changed against `main`
+**Findings:** <a> P0, <b> P1, <c> P2
 
-### Bugs / correctness
+### P0 — must fix before shipping
 
-- [BUG] <path>:<line>: <issue>
+- [P0][BUG] <path>:<line>: <issue>
 
-### Inconsistencies
+### P1 — should fix
 
-- [INCONSISTENT] <path>:<line>: <issue>
+- [P1][API] <path>:<line>: <issue>
+- [P1][LOST-COMMENT] <path>:<line>: <quoted snippet of the removed comment> — <why the rationale still applies>
 
-### Documentation accuracy
+### P2 — nits and polish
 
-- [DOC] <path>:<line>: <issue>
-
-### Lost explanatory comments
-
-- [LOST-COMMENT] <path>:<line>: <quoted snippet of the removed comment> — <why the rationale still applies>
-
-### API concerns
-
-- [API] <path>:<line>: <issue> (e.g. removed/renamed public symbol, signature change, new vague public name)
+- [P2][DOC] <path>:<line>: <issue>
 ```
 
-Drop any section that has zero findings.
+Drop any tier section that has zero findings. If there are no findings at all, say so plainly.
 
-### 6. Confirm next step with the user
+### 7. Confirm next step with the user
 
-After delivering the report, do not auto-fix. Ask the user which findings they want addressed and whether they want to:
+After delivering the report, do not auto-fix. Offer to hand off to **refine-it** (`.agents/skills/refine-it/SKILL.md`), which verifies each finding against the code and applies its own fix-size policy — P0 always, P1 when the fix is small enough, P2 only when it's tiny and about this change.
+
+Alternatives worth naming for the user:
 
 - Ship as-is and accept the flagged tradeoffs
-- Fix specific findings before shipping
+- Fix a specific subset of findings before shipping
 - Split concerns out into separate PRs
 
-## Severity labels
+## Category labels
 
-| Label            | Meaning                                                                                                                |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `[BUG]`          | Incorrect behavior the diff introduces                                                                                 |
-| `[INCONSISTENT]` | Code/docs/types disagree with each other or with the rest of the codebase                                              |
-| `[DOC]`          | Docs/comments don't match the change                                                                                   |
-| `[LOST-COMMENT]` | Diff removed a comment carrying irreplaceable rationale or warning                                                     |
+Categories describe *what kind* of problem a finding is; the P-tier describes *how much it matters*.
+
+| Label            | Meaning                                                                                                               |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `[BUG]`          | Incorrect behavior the diff introduces                                                                                |
+| `[INCONSISTENT]` | Code/docs/types disagree with each other or with the rest of the codebase                                             |
+| `[DOC]`          | Docs/comments don't match the change                                                                                  |
+| `[LOST-COMMENT]` | Diff removed a comment carrying irreplaceable rationale or warning                                                    |
 | `[API]`          | Public-surface change worth calling out: removed/renamed export, changed signature, new vague public name, new export  |
-| `[NIT]`          | Style or readability suggestion; reviewer-optional                                                                     |
+| `[NIT]`          | Style or readability suggestion; reviewer-optional                                                                    |
 
 ## What NOT to do
 
 - Do not run formatters, linters, or auto-fixers as part of the review
 - Do not commit, push, or open PRs — this skill is read-only
+- Do not fix findings yourself; that's **refine-it**'s job
 - Do not repeat the entire diff back to the user; report only findings
 - Do not flag changes inside `tests/` or `_*.py` modules as `[API]`
-- Do not report style nits as `[BUG]`
+- Do not report a style nit as P0, and do not leave any finding untiered

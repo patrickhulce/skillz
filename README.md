@@ -39,10 +39,11 @@ SKILLZ_REF=refs/heads/foo ./install.sh  # explicit ref without rewriting
 - **`build-scripts`** — Structure build, lint, typecheck, and test scripts across npm/pnpm, Makefiles, and Python invoke using a hierarchical task convention. See [.agents/skills/build-scripts/SKILL.md](.agents/skills/build-scripts/SKILL.md).
 - **`commit-it`** — Organize mixed changes into focused [scoped commits](https://scopedcommits.com/), with a safety checkpoint and a scope validator. See [.agents/skills/commit-it/SKILL.md](.agents/skills/commit-it/SKILL.md).
 - **`test-it`** — Discover the repo's real test commands (mirroring GitHub Actions), scope the run to the diff, and hand off to `dogfood-it` for docs. See [.agents/skills/test-it/SKILL.md](.agents/skills/test-it/SKILL.md).
-- **`review-it`** — Read-only pre-ship review of the diff against `main` for bugs, inconsistencies, lost comments, and API hygiene. See [.agents/skills/review-it/SKILL.md](.agents/skills/review-it/SKILL.md).
+- **`review-it`** — Read-only pre-ship review of the diff against `main` for bugs, inconsistencies, lost comments, and API hygiene, with every finding tiered P0/P1/P2. See [.agents/skills/review-it/SKILL.md](.agents/skills/review-it/SKILL.md).
+- **`refine-it`** — Act on review feedback, from either a `review-it` report or a PR's review threads: verify each claim, fix by severity and fix size, reply, and resolve. See [.agents/skills/refine-it/SKILL.md](.agents/skills/refine-it/SKILL.md).
 - **`describe-it`** — Generate a structured pull request description from the branch's commits and diff. See [.agents/skills/describe-it/SKILL.md](.agents/skills/describe-it/SKILL.md).
-- **`ship-it`** — End-to-end PR workflow: scoped commits, push, PR description, open the PR with `gh`, and monitor until green. See [.agents/skills/ship-it/SKILL.md](.agents/skills/ship-it/SKILL.md).
-- **`sherpa-it`** — Diagnose and fix CI failures by inspecting GitHub Actions logs via `gh`, guiding a PR to green. See [.agents/skills/sherpa-it/SKILL.md](.agents/skills/sherpa-it/SKILL.md).
+- **`ship-it`** — End-to-end PR workflow: scoped commits, one review/refine pass, push, PR description, open the PR with `gh`, and monitor to mergeable. See [.agents/skills/ship-it/SKILL.md](.agents/skills/ship-it/SKILL.md).
+- **`sherpa-it`** — Drive a PR to mergeable: fix CI failures from GitHub Actions logs and address reviewer comments, looping until green and resolved. See [.agents/skills/sherpa-it/SKILL.md](.agents/skills/sherpa-it/SKILL.md).
 - **`dogfood-it`** — Test docs and tutorials step-by-step, logging every error, unclear step, and workaround to `FEEDBACK.md`. See [.agents/skills/dogfood-it/SKILL.md](.agents/skills/dogfood-it/SKILL.md).
 
 ## Development

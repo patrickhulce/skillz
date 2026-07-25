@@ -1,5 +1,5 @@
 ---
-name: python-script
+name: python-scripts
 description: Guidance for writing one-off / standalone Python scripts. Use when creating a quick script, throwaway utility, automation snippet, or any single-file Python program. Scripts must be self-contained, run with uv and an explicit Python version, and declare dependencies via a PEP 723 inline metadata header with exact version pins.
 disable-model-invocation: true
 ---

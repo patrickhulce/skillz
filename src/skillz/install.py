@@ -494,7 +494,7 @@ def enumerate_hook_files(repo: str, tree_sha: str) -> list[HookFile]:
             continue
         if not path.startswith(HOOKS_PREFIX):
             continue
-        rest = path[len(HOOKS_PREFIX):]
+        rest = path[len(HOOKS_PREFIX) :]
         parts = rest.split("/")
         if len(parts) != 3:
             continue
@@ -574,18 +574,12 @@ def merge_hooks(
     # Build a mutable deep copy of existing hooks
     merged: dict[str, list[dict]] = {}
     for event, matcher_list in existing.items():
-        merged[event] = [
-            {"matcher": g["matcher"], "hooks": list(g.get("hooks", []))}
-            for g in matcher_list
-        ]
+        merged[event] = [{"matcher": g["matcher"], "hooks": list(g.get("hooks", []))} for g in matcher_list]
 
     # Remove hooks that were in the last manifest but are no longer desired
     for event in list(merged.keys()):
         for group in merged[event]:
-            group["hooks"] = [
-                h for h in group["hooks"]
-                if h.get("command") not in last_commands or h.get("command") in desired_commands
-            ]
+            group["hooks"] = [h for h in group["hooks"] if h.get("command") not in last_commands or h.get("command") in desired_commands]
         # Clean up empty matcher groups
         merged[event] = [g for g in merged[event] if g["hooks"]]
     # Remove empty event keys
@@ -731,11 +725,7 @@ def main(argv: list[str] | None = None) -> int:
     target_dir = choose_target(args)
     ok(f"target: {target_dir}")
 
-    overwrite_mode = (
-        args.overwrite
-        or os.environ.get("SKILLZ_OVERWRITE")
-        or ("claude" if os.environ.get("SKILLZ_FORCE_CONFIG") else None)
-    )
+    overwrite_mode = args.overwrite or os.environ.get("SKILLZ_OVERWRITE") or ("claude" if os.environ.get("SKILLZ_FORCE_CONFIG") else None)
     overwrite_conflicts = overwrite_mode in ("all", "skills")
     force_config = overwrite_mode in ("all", "claude")
 
