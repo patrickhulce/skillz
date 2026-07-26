@@ -84,9 +84,11 @@ EOF
 fi
 ok "python runner: ${PY_RUNNER_DESC}"
 
-# uv only treats the target as a script when it ends in .py, and BSD mktemp
-# appends its own suffix to the template, so name the file inside a temp dir.
-TMP_DIR="$(mktemp -d -t skillz-install)"
+# uv only treats the target as a script when it ends in .py, so name the file
+# inside a temp dir. An explicit XXXXXX template keeps both GNU mktemp (which
+# rejects templates without X's) and BSD mktemp (which appends its own suffix
+# to -t prefixes) happy.
+TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/skillz-install.XXXXXX")"
 TMP="${TMP_DIR}/install.py"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
