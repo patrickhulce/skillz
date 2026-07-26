@@ -34,7 +34,8 @@ while [ $# -gt 0 ]; do
       ;;
   esac
 done
-set -- "${REMAINING[@]}"
+# bash 3.2 treats an empty array as unset under `set -u`.
+set -- ${REMAINING[@]+"${REMAINING[@]}"}
 
 REPO="${SKILLZ_REPO:-patrickhulce/skillz}"
 if [ -n "${CLI_BRANCH}" ]; then
@@ -83,8 +84,11 @@ EOF
 fi
 ok "python runner: ${PY_RUNNER_DESC}"
 
-TMP="$(mktemp -t skillz-install.XXXXXX.py)"
-trap 'rm -f "$TMP"' EXIT
+# uv only treats the target as a script when it ends in .py, and BSD mktemp
+# appends its own suffix to the template, so name the file inside a temp dir.
+TMP_DIR="$(mktemp -d -t skillz-install)"
+TMP="${TMP_DIR}/install.py"
+trap 'rm -rf "$TMP_DIR"' EXIT
 
 info "downloading installer from ${INSTALLER_URL}"
 if ! curl -fsSL "$INSTALLER_URL" -o "$TMP"; then
