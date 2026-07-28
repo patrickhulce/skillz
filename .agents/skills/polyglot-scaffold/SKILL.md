@@ -86,3 +86,4 @@ See [references/architecture.md](references/architecture.md) for layout and conv
 - Do not duplicate business logic in Python or TypeScript bindings
 - Do not edit placeholder tokens in `template/` by hand when scaffolding — use the script
 - Do not skip `make` verification after scaffolding
+- Do not remove the `[[tool.uv.index]]` pin to `https://pypi.org/simple` in the Python package's `pyproject.toml` — it forces `uv` to use public PyPI even when a corporate/internal index is configured globally (e.g. via `UV_INDEX_URL` or `~/.config/uv/uv.toml`), preventing accidental resolution against an internal index for an open-source project
