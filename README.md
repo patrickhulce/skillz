@@ -43,6 +43,7 @@ SKILLZ_REF=refs/heads/foo ./install.sh  # explicit ref without rewriting
 - **`refine-it`** — Act on review feedback, from either a `review-it` report or a PR's review threads: verify each claim, fix by severity and fix size, reply, and resolve. See [.agents/skills/refine-it/SKILL.md](.agents/skills/refine-it/SKILL.md).
 - **`describe-it`** — Generate a structured pull request description from the branch's commits and diff. See [.agents/skills/describe-it/SKILL.md](.agents/skills/describe-it/SKILL.md).
 - **`ship-it`** — End-to-end PR workflow: scoped commits, one review/refine pass, push, PR description, open the PR with `gh`, and monitor to mergeable. See [.agents/skills/ship-it/SKILL.md](.agents/skills/ship-it/SKILL.md).
+- **`yeet-it`** — Reckless `ship-it` correlary: scoped commits directly on `main`, no checkpoint/review/PR, rebase onto `origin/main` if it moved, push. Never force pushes. See [.agents/skills/yeet-it/SKILL.md](.agents/skills/yeet-it/SKILL.md).
 - **`sherpa-it`** — Drive a PR to mergeable: fix CI failures from GitHub Actions logs and address reviewer comments, looping until green and resolved. See [.agents/skills/sherpa-it/SKILL.md](.agents/skills/sherpa-it/SKILL.md).
 - **`dogfood-it`** — Test docs and tutorials step-by-step, logging every error, unclear step, and workaround to `FEEDBACK.md`. See [.agents/skills/dogfood-it/SKILL.md](.agents/skills/dogfood-it/SKILL.md).
 
