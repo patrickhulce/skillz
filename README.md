@@ -13,7 +13,7 @@ Installs skills into either:
 - **`~/.agents/skills/`** — available in every project (default)
 - **`<repo>/.agents/skills/`** — scoped to one project (`--target repo`)
 
-Re-run the same command any time to update. Skills installed by skillz carry a hidden trailer so updates are non-destructive and hand-edited skills are never silently overwritten.
+Re-run the same command any time to update. Skills installed by skillz carry a hidden trailer so updates are non-destructive and hand-edited skills are never silently overwritten. Staleness is tracked per skill, so a release that changes one skill leaves the rest untouched.
 
 ### Requirements
 

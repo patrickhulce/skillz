@@ -19,6 +19,7 @@ Constraints (deliberate):
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -56,7 +57,13 @@ TRAILER_BLOCK_RE = re.compile(
     re.DOTALL,
 )
 TRAILER_HASH_RE = re.compile(r"^git-hash:\s*(?P<sha>[0-9a-f]{40})\s*$", re.MULTILINE)
+TRAILER_SKILL_HASH_RE = re.compile(r"^skill-hash:\s*(?P<id>\S+)\s*$", re.MULTILINE)
 TRAILER_SOURCE_RE = re.compile(r"^source:\s*(?P<url>https?://\S+)\s*$", re.MULTILINE)
+
+# Trailer written before per-skill content IDs existed; never matches a real ID.
+LEGACY_CONTENT_ID = "legacy"
+
+_TREE_CACHE: dict[tuple[str, str], dict] = {}
 
 
 def effective_install_ref_from_env() -> str:
@@ -118,6 +125,7 @@ class SkillFile:
     repo_path: str
     mode: str
     size: int
+    sha: str = ""
 
     @property
     def is_executable(self) -> bool:
@@ -128,6 +136,7 @@ class SkillFile:
 class Skill:
     name: str
     files: list[SkillFile] = field(default_factory=list)
+    content_id: str = ""
 
 
 @dataclass
@@ -151,30 +160,64 @@ def resolve_install_sha(repo: str, ref: str) -> tuple[str, str]:
     return sha, tree_sha
 
 
-def enumerate_skills(repo: str, tree_sha: str) -> list[Skill]:
-    info(f"enumerating {SKILLS_PREFIX} via git tree API")
+def fetch_tree(repo: str, tree_sha: str) -> dict:
+    """Fetch a recursive git tree, memoized so callers can share one request."""
+    cached = _TREE_CACHE.get((repo, tree_sha))
+    if cached is not None:
+        return cached
     data = gh_json(f"{GITHUB_API}/repos/{repo}/git/trees/{tree_sha}?recursive=1")
     if not isinstance(data, dict) or "tree" not in data:
         raise RuntimeError(f"unexpected tree response: {data!r}")
     if data.get("truncated"):
         warn("git tree response was truncated; very large repos are not supported")
+    _TREE_CACHE[(repo, tree_sha)] = data
+    return data
+
+
+def derive_content_id(skill: Skill) -> str:
+    """Fingerprint a skill from its blobs, for trees missing a directory entry."""
+    digest = hashlib.sha256()
+    for f in sorted(skill.files, key=lambda f: f.repo_path):
+        digest.update(f"{f.mode} {f.repo_path} {f.sha}\n".encode())
+    return "sha256:" + digest.hexdigest()
+
+
+def enumerate_skills(repo: str, tree_sha: str) -> list[Skill]:
+    info(f"enumerating {SKILLS_PREFIX} via git tree API")
+    data = fetch_tree(repo, tree_sha)
 
     skills: dict[str, Skill] = {}
+    subtree_ids: dict[str, str] = {}
     for entry in data["tree"]:
         path = entry.get("path", "")
-        if entry.get("type") != "blob":
-            continue
         if not path.startswith(SKILLS_PREFIX):
             continue
         rest = path[len(SKILLS_PREFIX) :]
+        if entry.get("type") == "tree":
+            # A skill's own directory: its tree SHA changes iff that skill's
+            # contents change, which is exactly the staleness signal we want.
+            if rest and "/" not in rest:
+                subtree_ids[rest] = entry.get("sha", "")
+            continue
+        if entry.get("type") != "blob":
+            continue
         if "/" not in rest:
             continue
         skill_name, _ = rest.split("/", 1)
-        sf = SkillFile(repo_path=path, mode=entry.get("mode", "100644"), size=entry.get("size", 0))
+        sf = SkillFile(
+            repo_path=path,
+            mode=entry.get("mode", "100644"),
+            size=entry.get("size", 0),
+            sha=entry.get("sha", ""),
+        )
         skills.setdefault(skill_name, Skill(name=skill_name)).files.append(sf)
 
     if not skills:
         raise RuntimeError(f"no skills found under {SKILLS_PREFIX} in tree {tree_sha}")
+
+    for name, skill in skills.items():
+        skill.content_id = subtree_ids.get(name) or derive_content_id(skill)
+
     ok(f"found {len(skills)} skill(s): {', '.join(sorted(skills))}")
     return [skills[name] for name in sorted(skills)]
 
@@ -228,7 +271,11 @@ def choose_target(args: argparse.Namespace) -> Path:
 
 
 def parse_existing_trailer(skill_md: Path, expected_repo: str) -> str | None:
-    """Return the git-hash from the skillz trailer, or None if absent/wrong-repo."""
+    """Return the installed content ID, or None when the trailer isn't ours.
+
+    Trailers written before per-skill content IDs report ``LEGACY_CONTENT_ID``,
+    which never matches a real ID, so those skills update once and then settle.
+    """
     if not skill_md.is_file():
         return None
     try:
@@ -246,11 +293,18 @@ def parse_existing_trailer(skill_md: Path, expected_repo: str) -> str | None:
     expected_url = f"https://github.com/{expected_repo}"
     if source_match.group("url").rstrip("/") != expected_url:
         return None  # installed by a different repo — treat as conflict
-    hash_match = TRAILER_HASH_RE.search(body)
-    return hash_match.group("sha") if hash_match else "unknown"
+    hash_match = TRAILER_SKILL_HASH_RE.search(body)
+    return hash_match.group("id") if hash_match else LEGACY_CONTENT_ID
 
 
-def classify(skills: Iterable[Skill], target_dir: Path, install_sha: str, repo: str) -> list[PlanEntry]:
+def short_id(content_id: str | None) -> str:
+    if not content_id:
+        return "unknown"
+    prefix, sep, digest = content_id.partition(":")
+    return f"{prefix}:{digest[:7]}" if sep else content_id[:7]
+
+
+def classify(skills: Iterable[Skill], target_dir: Path, repo: str) -> list[PlanEntry]:
     plan: list[PlanEntry] = []
     for skill in skills:
         dest = target_dir / skill.name
@@ -261,7 +315,7 @@ def classify(skills: Iterable[Skill], target_dir: Path, install_sha: str, repo: 
         existing = parse_existing_trailer(skill_md, repo)
         if existing is None:
             plan.append(PlanEntry(skill=skill, classification="conflict", dest=dest))
-        elif existing == install_sha:
+        elif existing == skill.content_id:
             plan.append(PlanEntry(skill=skill, classification="ours-current", dest=dest, existing_hash=existing))
         else:
             plan.append(PlanEntry(skill=skill, classification="ours-stale", dest=dest, existing_hash=existing))
@@ -299,16 +353,17 @@ def maybe_resolve_conflicts(
     return answer in {"y", "yes"}
 
 
-def build_trailer(install_sha: str, repo: str, skill_name: str) -> str:
+def build_trailer(install_sha: str, repo: str, skill: Skill) -> str:
     when = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     return (
         "\n\n"
         f"<!-- {TRAILER_MARKER}\n"
         f"installed-by: skillz\n"
         f"install-date: {when}\n"
+        f"skill-hash: {skill.content_id}\n"
         f"git-hash: {install_sha}\n"
         f"source: https://github.com/{repo}\n"
-        f"skill: {skill_name}\n"
+        f"skill: {skill.name}\n"
         "-->\n"
     )
 
@@ -336,7 +391,7 @@ def stage_skill(skill: Skill, repo: str, install_sha: str, work_root: Path) -> P
     if skill_md.is_file():
         text = skill_md.read_text(encoding="utf-8")
         text = strip_existing_trailer(text)
-        text += build_trailer(install_sha, repo, skill.name)
+        text += build_trailer(install_sha, repo, skill)
         skill_md.write_text(text, encoding="utf-8")
     else:
         warn(f"skill {skill.name!r} has no SKILL.md; install trailer will not be added")
@@ -483,9 +538,7 @@ class HookFile:
 def enumerate_hook_files(repo: str, tree_sha: str) -> list[HookFile]:
     """Return all hook definition files found under hooks/ in the tree."""
     info(f"enumerating {HOOKS_PREFIX} for Claude hook definitions")
-    data = gh_json(f"{GITHUB_API}/repos/{repo}/git/trees/{tree_sha}?recursive=1")
-    if not isinstance(data, dict) or "tree" not in data:
-        raise RuntimeError(f"unexpected tree response: {data!r}")
+    data = fetch_tree(repo, tree_sha)
 
     hook_files: list[HookFile] = []
     for entry in data["tree"]:
@@ -729,11 +782,14 @@ def main(argv: list[str] | None = None) -> int:
     overwrite_conflicts = overwrite_mode in ("all", "skills")
     force_config = overwrite_mode in ("all", "claude")
 
-    plan = classify(skills, target_dir, install_sha, args.repo)
+    plan = classify(skills, target_dir, args.repo)
     print()
     info("plan:")
     for p in plan:
-        print(f"  - {p.skill.name:<32} {p.classification}")
+        detail = ""
+        if p.classification == "ours-stale":
+            detail = f" ({short_id(p.existing_hash)} -> {short_id(p.skill.content_id)})"
+        print(f"  - {p.skill.name:<32} {p.classification}{detail}")
     print()
 
     overwrite = maybe_resolve_conflicts(plan, overwrite_conflicts=overwrite_conflicts, yes=args.yes)
