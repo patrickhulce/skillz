@@ -210,7 +210,7 @@ def test_apply_plan_skips_conflict_by_default(tmp_path: Path) -> None:
     original_content = skill_md.read_text()
 
     entry = PlanEntry(skill=skill, classification="conflict", dest=dest)
-    installed, updated, up_to_date, skipped, failed = apply_plan([entry], OUR_REPO, SHA, overwrite_conflicts=False, dry_run=False)
+    installed, updated, _up_to_date, skipped, failed = apply_plan([entry], OUR_REPO, SHA, overwrite_conflicts=False, dry_run=False)
 
     assert skipped == 1
     assert installed == updated == failed == 0
@@ -227,7 +227,7 @@ def test_apply_plan_calls_stage_skill_when_overwrite_forced(tmp_path: Path) -> N
     entry = PlanEntry(skill=skill, classification="conflict", dest=dest)
 
     with patch("skillz.install.stage_skill", side_effect=RuntimeError("mock")) as mock_stage:
-        installed, updated, up_to_date, skipped, failed = apply_plan([entry], OUR_REPO, SHA, overwrite_conflicts=True, dry_run=False)
+        _installed, _updated, _up_to_date, skipped, failed = apply_plan([entry], OUR_REPO, SHA, overwrite_conflicts=True, dry_run=False)
 
     mock_stage.assert_called_once()
     # stage_skill raised → counted as failed, not skipped

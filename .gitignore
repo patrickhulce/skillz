@@ -12,6 +12,7 @@ htmlcov/
 
 # polyglot-scaffold template build artifacts
 .agents/skills/**/*.lock
+.agents/skills/**/pnpm-lock.yaml
 .agents/skills/**/.venv/
 .agents/skills/**/target/
 .agents/skills/**/node_modules/

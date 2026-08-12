@@ -19,7 +19,7 @@ Scaffold a **Rust + Python + TypeScript** monorepo from the bundled runnable tem
 
 ## Prerequisites
 
-- Rust (stable), uv, pnpm 9+, Node 22+
+- Rust (stable), uv, pnpm 10.26+, Node 22+
 - Destination directory must not already exist
 
 ## Workflow

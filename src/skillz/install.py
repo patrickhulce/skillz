@@ -30,10 +30,10 @@ import sys
 import tempfile
 import urllib.error
 import urllib.request
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterable
 
 DEFAULT_REPO = os.environ.get("SKILLZ_REPO", "patrickhulce/skillz")
 SKILLS_PREFIX = ".agents/skills/"
@@ -354,7 +354,7 @@ def maybe_resolve_conflicts(
 
 
 def build_trailer(install_sha: str, repo: str, skill: Skill) -> str:
-    when = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    when = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     return (
         "\n\n"
         f"<!-- {TRAILER_MARKER}\n"
@@ -465,7 +465,7 @@ def apply_plan(
             try:
                 staging = stage_skill(entry.skill, repo, install_sha, work_root)
                 atomic_swap(staging, entry.dest)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - one skill's failure must not abort the rest
                 fail(f"{label} {verb} FAILED: {exc}")
                 failed += 1
                 continue
@@ -507,7 +507,7 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
             i += 1
             continue
         if ": " in line or line.endswith(":"):
-            key, sep, val = line.partition(": ")
+            key, _sep, val = line.partition(": ")
             key = key.strip()
             val = val.strip()
             if val == "|":
@@ -723,7 +723,7 @@ def configure_claude_settings(
     new_manifest["hooks"] = desired_hooks
     SKILLZ_MANIFEST_PATH.write_text(json.dumps(new_manifest, indent=2) + "\n", encoding="utf-8")
 
-    ok("Claude settings: merged into %s" % CLAUDE_SETTINGS_PATH)
+    ok(f"Claude settings: merged into {CLAUDE_SETTINGS_PATH}")
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:

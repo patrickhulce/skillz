@@ -19,7 +19,7 @@ skillz = "skillz.install:main"
 [dependency-groups]
 dev = [
     "pytest>=8.0",
-    "ruff>=0.8",
+    "ruff>=0.16,<0.17",
 ]
 
 [tool.setuptools.packages.find]

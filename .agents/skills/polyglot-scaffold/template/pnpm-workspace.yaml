@@ -1,2 +1,6 @@
 packages:
   - src/node-myplaceholder-project
+
+# pnpm 10.26+ refuses to run dependency build scripts unless allowlisted here.
+allowBuilds:
+  esbuild: true

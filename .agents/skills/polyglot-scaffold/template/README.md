@@ -35,6 +35,7 @@ myplaceholder_rust_crate::echo(b"hello");
 
 ```python
 from myplaceholder_project import echo
+
 echo(b"hello")
 ```
 

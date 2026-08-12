@@ -30,9 +30,11 @@ Every script starts with a PEP 723 inline metadata block (the "uv header"). Pin 
 import requests
 from rich import print
 
+
 def main() -> None:
     resp = requests.get("https://httpbin.org/get", timeout=10)
     print(resp.json())
+
 
 if __name__ == "__main__":
     main()
