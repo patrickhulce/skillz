@@ -114,13 +114,13 @@ For each group:
 
 **5a. Validate the scope**
 
-Before staging, confirm the chosen scope is valid for this repo:
+Before staging, confirm the chosen scope is valid for this repo. Pass the files in this group so `components/` / `routes/` / `api/` / `lib/` (and extra `<scope>` rules) can match against them:
 
 ```bash
-./scripts/validate-scope.sh <scope>
+python3 ./scripts/validate-scope.py <scope> -- path/to/file1 path/to/file2
 ```
 
-This enforces the project's scope rules (see "Scoped Commit Reference" below). Fix the scope if it is rejected.
+This enforces the project's scope rules (see "Scoped Commit Reference" below). Fix the scope if it is rejected. Never use `treewide`.
 
 **5b. Stage the specific changes**
 
@@ -202,7 +202,7 @@ git reset --hard $(cat ~/.claude/semantic-commits/<timestamp>.checkpoint)
 
 ## Scoped Commit Reference
 
-This project follows the [Scoped Commits](https://scopedcommits.com/) convention. Commit messages put the affected scope up front so the log is easy to scan:
+Commit messages put the affected surface up front so the log is easy to scan:
 
 ```
 <scope>: <description>
@@ -212,25 +212,72 @@ This project follows the [Scoped Commits](https://scopedcommits.com/) convention
 [optional footer]
 ```
 
-**Choosing the scope:**
+`treewide` is banned. If a change spans multiple surfaces, use `feature/<name>` when that name is already listed in `README.md`; otherwise split the commit.
 
-- **Monorepo:** the scope MUST be a package name (a workspace member) OR a narrow global: `scripts`, `ci`, or `docs`.
-- **Single-package repo:** the scope MUST be a directory or an extensionless file path that locates the change in the tree, OR a narrow global: `scripts`, `ci`, or `docs`.
-    - It is always a subdirectory (`utils`, `auth`, `components`) or a path down to a specific extensionless file (`utils/jwt`, `components/file-picker`, `pages/foo`).
-    - It NEVER includes a file extension — use `utils/jwt`, not `utils/jwt.ts`.
-    - It NEVER names a nested file without its folder — use `components/file-picker`, not just `file-picker`.
-    - No spaces.
-    - Good: `components/file-picker`, `utils/jwt`, `utils`, `auth`, `pages/foo`. Bad: `jwt.ts`, `file-picker`, `the auth module`.
-- **Whole-tree changes:** use `treewide`.
-- **A commit spanning multiple scopes:** pick a broader scope that encompasses them (e.g. the common parent directory), list scopes comma-separated, or split the commit so each one fits a single scope.
+**Always valid:**
 
-Validate any scope before committing:
+- `skills/<name>` — `<name>` must be an existing skill directory under `.agents/skills/`, `.claude/skills/`, `.cursor/skills/`, or `skills/`
+- `tests` or `tests/<scope>`
+- `docs` or `docs/<scope>`
+- `infra` or `infra/<scope>` (CI, linters, lockfiles: `infra/ci`, `infra/eslint`, `infra/uv`)
 
-```bash
-./scripts/validate-scope.sh <scope>
+**Monorepo surfaces** (only if that top-level directory exists):
+
+- `packages/<name>` or `packages/<name>/<scope>`
+- `apps/<name>` or `apps/<name>/<scope>`
+- `*` is allowed only in the `<name>` segment, and must match at least one directory (e.g. `packages/*-mycool-library`)
+
+**Code surfaces** (not tied to a top-level directory). `<name>` must equal a folder or filename among the files in this commit:
+
+- `components/<name>`
+- `routes/<name>`
+- `api/<name>`
+- `lib/<name>`
+
+`frontend/` is not a valid prefix — use `components/` or `routes/`. These prefixes may appear anywhere in the tree (`src/ui/components/LoginModal.tsx` validates `components/LoginModal`).
+
+**Named feature** (multi-surface):
+
+- `feature/<name>` — `<name>` must appear in repo-root `README.md` as a markdown list item whose bold text is that name, e.g. `- **name** - …`, `- **name**: …`, or `- **\`name\`** — …`
+
+If README has no such entry, split into surface-scoped commits or add the feature to the README first.
+
+**Repo extras:** a consuming repo may add prefixes via an HTML comment in `README.md`:
+
+```html
+<!-- skillz-commit-scopes: foo/<scope>,bar/<*>,baz -->
 ```
 
-**Breaking changes:** Add `!` after the scope: `api!: change response format`
+- `foo/<scope>` — suffix required; must match a changed folder or filename
+- `bar/<*>` — suffix required; any non-empty path token
+- `baz` — exact bare token only
+
+Extra scopes are additive. `treewide` stays banned even if listed.
+
+**Examples:**
+
+- `skills/polyglot-scaffold: add initial implementation`
+- `tests/node-mycool-library: fix flaky failure in s3 tests`
+- `docs: update guidance for v1->v2 migrations`
+- `infra/uv: bump lockfile`
+- `infra/eslint: ignore semicolons rule`
+- `infra/ci: add github actions workflows`
+- `packages/python-mycool-library: add __iter__ sugar to upload`
+- `packages/*-mycool-library: add the decode function`
+- `apps/v8r.dev/frontend: add login modal`
+- `components/LoginModal: add login modal`
+- `routes/settings: add billing section`
+- `api/preferences: add user preferences endpoint`
+- `lib/auth: validate token expiration correctly`
+- `feature/commit-it: add scope validator and README examples`
+
+Validate any scope before committing, passing this group's files:
+
+```bash
+python3 ./scripts/validate-scope.py <scope> -- path/to/file1 path/to/file2
+```
+
+**Breaking changes:** Add `!` after the scope: `api/preferences!: change response format`
 
 **Description rules:**
 
@@ -267,8 +314,10 @@ Validate any scope before committing:
 - That's okay! A logical change can span multiple files
 - What matters is that they serve a single purpose
 
-**"The scope was rejected by validate-scope.sh"**
+**"The scope was rejected by validate-scope.py"**
 
-- In a monorepo, the scope must match a workspace package name or be one of `scripts`, `ci`, `docs`
-- Outside a monorepo, drop spaces from the scope or use a narrower subsystem name
-- If the change truly spans the whole tree, use `treewide`
+- Use a reserved prefix: `skills/`, `tests/`, `docs/`, `infra/`, `packages/`, `apps/`, `components/`, `routes/`, `api/`, `lib/`, or `feature/`
+- Do not use `treewide`, `scripts`, `ci`, or `frontend` as a scope
+- For `components/` / `routes/` / `api/` / `lib/`, `<name>` must be a folder or filename in this group's files — pass those files to the validator
+- If the change spans surfaces, use `feature/<name>` when README.md already lists that feature; otherwise split the commit (or add the list item first)
+- Consuming repos can add prefixes with `<!-- skillz-commit-scopes: foo/<scope>,bar/<*>,baz -->` in README.md

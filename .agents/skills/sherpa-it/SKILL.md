@@ -138,7 +138,7 @@ git commit -m "<scope>: <description of what was fixed>"
 git push
 ```
 
-Choose `<scope>` per the project's scope rules — a workspace package name (monorepo) or a subsystem/global (`scripts`, `ci`, `docs`). Validate with `.agents/skills/commit-it/scripts/validate-scope.sh <scope>` if unsure.
+Choose `<scope>` per the **commit-it** skill (`skills/`, `tests/`, `docs/`, `infra/`, `packages/`, `apps/`, `components/`, `routes/`, `api/`, `lib/`, or `feature/`). Never use `treewide`. Validate with `python3 .agents/skills/commit-it/scripts/validate-scope.py <scope> -- <files>` if unsure.
 
 Skip the commit only if this pass changed nothing (no CI fix needed, no valid review findings) — in that case go straight to step 9 to keep monitoring.
 
