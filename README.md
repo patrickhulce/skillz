@@ -47,6 +47,7 @@ SKILLZ_REF=refs/heads/foo ./install.sh  # explicit ref without rewriting
 - **`yeet-it`** — Reckless `ship-it` correlary: scoped commits directly on `main`, no checkpoint/review/PR, rebase onto `origin/main` if it moved, push. Never force pushes. See [.agents/skills/yeet-it/SKILL.md](.agents/skills/yeet-it/SKILL.md).
 - **`sherpa-it`** — Drive a PR to mergeable: fix CI failures from GitHub Actions logs and address reviewer comments, looping until green and resolved. See [.agents/skills/sherpa-it/SKILL.md](.agents/skills/sherpa-it/SKILL.md).
 - **`dogfood-it`** — Test docs and tutorials step-by-step, logging every error, unclear step, and workaround to `FEEDBACK.md`. See [.agents/skills/dogfood-it/SKILL.md](.agents/skills/dogfood-it/SKILL.md).
+- **`v8r-it`** — Deploy an app to Vercel onto the v8r platform (`*.v8r.app` hostname, optional CDN). See [.agents/skills/v8r-it/SKILL.md](.agents/skills/v8r-it/SKILL.md).
 
 ## Development
 
