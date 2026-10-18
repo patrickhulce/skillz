@@ -130,15 +130,15 @@ AI reviewers (Bugbot, Copilot, CodeRabbit) review asynchronously and take severa
 
 ### 8. Push the Fix
 
-Commit the CI fixes and review fixes together using a scope-style message (see the **commit-it** skill), or as a few logical commits if they're unrelated:
+Commit the CI fixes and review fixes together using a conventional commit (see the **commit-it** skill), or as a few logical commits if they're unrelated. The scope is mandatory and is the most important part of the message:
 
 ```bash
 git add -A
-git commit -m "<scope>: <description of what was fixed>"
+git commit -m "<type>(<scope>): <description of what was fixed>"
 git push
 ```
 
-Choose `<scope>` per the **commit-it** skill (`skills/`, `tests/`, `docs/`, `infra/`, `packages/`, `apps/`, `components/`, `routes/`, `api/`, `lib/`, or `feature/`). Never use `treewide`. Validate with `python3 .agents/skills/commit-it/scripts/validate-scope.py <scope> -- <files>` if unsure.
+Choose `<scope>` per the **commit-it** skill: a package or app member name (`python-mycool-library`, `v8r.dev/frontend`), a code surface (`components/`, `routes/`, `api/`, `lib/`), `infra(skills)` or `infra(skills/<name>)`, `infra(<tool>)` such as `uv`, `eslint`, or `ci`, or `docs(*)`. Never use `treewide`, `feature/`, or a `packages/` or `apps/` prefix. Validate with `python3 .agents/skills/commit-it/scripts/validate-scope.py "<type>(<scope>)" -- <files>` if unsure.
 
 Skip the commit only if this pass changed nothing (no CI fix needed, no valid review findings) — in that case go straight to step 9 to keep monitoring.
 

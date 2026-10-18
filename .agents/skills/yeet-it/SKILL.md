@@ -1,11 +1,11 @@
 ---
 name: yeet-it
-description: Reckless, no-safety-net correlary to ship-it. Commits whatever is uncommitted directly on main using scope-style commits, rebases onto the latest origin/main if it moved (resolving conflicts), and pushes straight to origin. Skips checkpoints, review passes, PRs, and confirmation pauses. Never force pushes or rewrites already-pushed remote history. Use when the user says "yeet it", "just push to main", "skip the PR", or wants uncommitted changes committed and pushed to main immediately without review.
+description: Reckless, no-safety-net correlary to ship-it. Commits whatever is uncommitted directly on main using conventional commits with a mandatory scope, rebases onto the latest origin/main if it moved (resolving conflicts), and pushes straight to origin. Skips checkpoints, review passes, PRs, and confirmation pauses. Never force pushes or rewrites already-pushed remote history. Use when the user says "yeet it", "just push to main", "skip the PR", or wants uncommitted changes committed and pushed to main immediately without review.
 ---
 
 # Yeet Code Straight to Main
 
-The reckless correlary to **ship-it**: commit whatever is uncommitted directly on `main` with scope-style commits, rebase on top of `origin/main` if it has moved, and push. No feature branch, no PR, no checkpoint, no review pass, no pause for confirmation.
+The reckless correlary to **ship-it**: commit whatever is uncommitted directly on `main` with conventional commits whose scope is mandatory, rebase on top of `origin/main` if it has moved, and push. No feature branch, no PR, no checkpoint, no review pass, no pause for confirmation.
 
 ## When NOT to use
 
@@ -27,13 +27,13 @@ git branch --show-current
 
 If not on `main`, stop and tell the user — yeet-it only operates directly on `main`, it does not create or switch branches.
 
-### 2. Commit uncommitted changes (scope-style, no checkpoint)
+### 2. Commit uncommitted changes (conventional commits, no checkpoint)
 
 If `git status --porcelain` shows any changes:
 
 1. Review `git diff` and `git diff --cached` to understand what changed.
-2. Group changes into logical, single-purpose commits using the scope rules and message format in **commit-it**'s "Scoped Commit Reference" section (`.agents/skills/commit-it/SKILL.md`) — but skip the rest of that skill's process.
-3. Stage and commit each group directly (`git add` / `git add -p` for partial files, then `git commit -m "<scope>: <description>"`).
+2. Group changes into logical, single-purpose commits using the scope rules and message format in **commit-it**'s "Conventional Commit Reference" section (`.agents/skills/commit-it/SKILL.md`) — but skip the rest of that skill's process. The scope is mandatory and is the most important part of the header.
+3. Stage and commit each group directly (`git add` / `git add -p` for partial files, then `git commit -m "<type>(<scope>): <description>"`).
 4. Do **not** run the checkpoint script, print a grouping table, or pause for review — commit immediately as you go.
 
 Skip this step entirely if the working tree is already clean.
