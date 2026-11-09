@@ -1,6 +1,6 @@
 ---
 name: v8r-it
-description: Deploy an arbitrary app to Vercel and onto the v8r platform, giving it a public hostname at <namespace>.v8r.app and optional asset hosting at cdn.v8r.app/n/<namespace>/. Use when the user says "v8r it", "v8r-it", "deploy to v8r", or wants an app on *.v8r.app or assets on cdn.v8r.app.
+description: Deploy an arbitrary app to Vercel and onto the v8r platform, giving it a public hostname at <namespace>.v8r.app optional asset hosting at cdn.v8r.app/n/<namespace>/, and private Postgres onboarding or credential regeneration for v8r apps. Use when the user says "v8r it", "v8r-it", "deploy to v8r", or wants an app on *.v8r.app or assets on cdn.v8r.app.
 disable-model-invocation: true
 ---
 
@@ -10,11 +10,26 @@ Ship an app onto the v8r platform. End state:
 
 - App deployed to Vercel and serving at `https://<namespace>.v8r.app`
 - Listed on the public showcase at `https://www.v8r.dev/apps`
+- (Optional) isolated Postgres database, server-only `DATABASE_URL`, migrations and verified persistence
 - (Optional) asset pipeline to `https://cdn.v8r.app/n/<namespace>/` via short-lived R2 credentials
 
 ## Architecture in one breath
 
 `www.v8r.dev` is the invite-only control plane. It owns the `v8r.app` Cloudflare zone and writes CNAMEs for claimed namespaces. Agents authenticate with a GitHub CLI token (`Authorization: Bearer $(gh auth token)`). The first successful API call by an invited login provisions their account.
+
+## Database onboarding (private agent guidance)
+
+For an app that needs Postgres, an existing app that forgot its DB, or a request to
+regenerate a DB credential, read [references/database.md](references/database.md)
+and use [scripts/database.mjs](scripts/database.mjs). Keep this guidance in the
+skill; do not publish a database docs page or advertise it on v8r.dev.
+
+For new DB-backed apps: link the Vercel project, claim/provision and install
+`DATABASE_URL`, run migrations, then deploy. This reorders the normal checklist:
+do the database-aware claim before the first build requiring a DB, and skip the
+later duplicate claim. Existing apps go directly to the database workflow; do not
+redeploy unrelated infrastructure or re-claim their namespace. Regeneration is an
+explicit rotation, never an automatic response to an existing database.
 
 ## Prerequisites
 
@@ -33,7 +48,7 @@ V8R_AUTH="Authorization: Bearer $(gh auth token)"
 
 ```
 - [ ] 1. Pick + validate a namespace
-- [ ] 2. Deploy the app to Vercel (production)
+- [ ] 2. Link Vercel; for DB-backed apps, provision/configure/migrate via references/database.md before deploying production
 - [ ] 3. Add <namespace>.v8r.app as a domain on the Vercel project
 - [ ] 4. Claim the namespace via the Agent API (target: vercel)
 - [ ] 5. Verify DNS, cert, and smoke test https://<namespace>.v8r.app
@@ -50,7 +65,8 @@ Claiming reserves both `<namespace>.v8r.app` and the CDN prefix `n/<namespace>/`
 
 ## Step 2: Deploy to Vercel
 
-From the app's repo root:
+For DB-backed apps, perform the database reference workflow between `vercel link`
+and `vercel --prod`. Otherwise use the sequence below. From the app's repo root:
 
 ```bash
 vercel project add <project-name>          # once; lowercase, hyphens, no dots
@@ -90,6 +106,10 @@ vercel domains add <namespace>.v8r.app <project> --scope <scope>
 It will report unverified until Step 4 lands — that's expected. Do **not** create DNS records for `v8r.app` yourself; the control plane owns that zone.
 
 ## Step 4: Claim the namespace (Agent API)
+
+If the database workflow already claimed this namespace, skip this claim. The
+example below is for apps without built-in Postgres; the database helper captures
+one-time credentials without printing them.
 
 Preflight, then claim. Do not send the user to the console unless the API returns 401/403 (then they need `gh auth login`, or an invite).
 
@@ -146,15 +166,15 @@ Limits: TTL ≤ 900s; 20 vends per token per 15 min; 401 = missing/malformed tok
 
 ## Troubleshooting
 
-| Symptom | Cause | Fix |
-|---|---|---|
-| `/api/me` 401 | No/invalid GitHub token | `gh auth login` and retry with `$(gh auth token)` |
-| `/api/me` 403 | Login not on the allowlist | User is not invited |
-| `/api/me` 502 | GitHub unreachable | Retry; do not treat as a v8r outage immediately |
-| Claim 409 | Namespace taken | Pick another name |
-| 404 on all Vercel routes after deploy | 0ms build, `framework: null` | PATCH framework preset (Step 2), redeploy |
-| 302 to `vercel.com/sso-api` | Deployment Protection on production | PATCH `ssoProtection` to `preview` (Step 2) |
-| Vercel domain stuck unverified | DNS not applied or proxied | `PUT .../deployment` then `POST .../dns-check`; CNAME must be DNS-only |
-| `curl` gives `000`/TLS error | Cert still provisioning | Wait ~60s, retry |
-| credentials endpoint 401 | Bad/missing CDN bearer token | Re-mint via `POST .../tokens`; check `v8r-` prefix |
-| Namespace rejected | Reserved or shape invalid | See Step 1 rules |
+| Symptom                               | Cause                               | Fix                                                                    |
+| ------------------------------------- | ----------------------------------- | ---------------------------------------------------------------------- |
+| `/api/me` 401                         | No/invalid GitHub token             | `gh auth login` and retry with `$(gh auth token)`                      |
+| `/api/me` 403                         | Login not on the allowlist          | User is not invited                                                    |
+| `/api/me` 502                         | GitHub unreachable                  | Retry; do not treat as a v8r outage immediately                        |
+| Claim 409                             | Namespace taken                     | Pick another name                                                      |
+| 404 on all Vercel routes after deploy | 0ms build, `framework: null`        | PATCH framework preset (Step 2), redeploy                              |
+| 302 to `vercel.com/sso-api`           | Deployment Protection on production | PATCH `ssoProtection` to `preview` (Step 2)                            |
+| Vercel domain stuck unverified        | DNS not applied or proxied          | `PUT .../deployment` then `POST .../dns-check`; CNAME must be DNS-only |
+| `curl` gives `000`/TLS error          | Cert still provisioning             | Wait ~60s, retry                                                       |
+| credentials endpoint 401              | Bad/missing CDN bearer token        | Re-mint via `POST .../tokens`; check `v8r-` prefix                     |
+| Namespace rejected                    | Reserved or shape invalid           | See Step 1 rules                                                       |
