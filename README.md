@@ -35,6 +35,8 @@ SKILLZ_REF=refs/heads/foo ./install.sh  # explicit ref without rewriting
 
 ## Skills Provided
 
+- **`sitrep`** — Quickly assess repo and PR status, reconcile TODO/design/handoff plans with the code, and recommend concrete next steps. See [.agents/skills/sitrep/SKILL.md](.agents/skills/sitrep/SKILL.md).
+- **`handoff-it`** — Write a complete `HANDOFF.md` so a future agent can resume with the current state, verification results, unfinished work, and deferred ideas. See [.agents/skills/handoff-it/SKILL.md](.agents/skills/handoff-it/SKILL.md).
 - **`polyglot-scaffold`** — Scaffold a Rust + Python + TypeScript monorepo (PyO3/maturin + napi-rs) from a runnable template. See [.agents/skills/polyglot-scaffold/SKILL.md](.agents/skills/polyglot-scaffold/SKILL.md).
 - **`build-scripts`** — Structure build, lint, typecheck, and test scripts across npm/pnpm, Makefiles, and Python invoke using a hierarchical task convention. See [.agents/skills/build-scripts/SKILL.md](.agents/skills/build-scripts/SKILL.md).
 - **`commit-it`** — Organize mixed changes into focused [scoped commits](https://scopedcommits.com/), with a safety checkpoint and a scope validator. See [.agents/skills/commit-it/SKILL.md](.agents/skills/commit-it/SKILL.md).
