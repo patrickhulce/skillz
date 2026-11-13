@@ -160,3 +160,34 @@ connections. There is no self-service restore or database deletion API.
   the mutation. Inspect saved output and status, then choose recovery deliberately.
 - **Connection failures after saving a secret:** check redeployment, hostname/TLS,
   correct app/environment, and pool limits before considering another rotation.
+
+## Optional development database
+
+Once the namespace is claimed, request a separate empty database and login for
+local development or preview. Production remains the default for existing
+commands. Do not share production credentials with development.
+
+```sh
+node <skill-dir>/scripts/database.mjs status-dev <namespace>
+node <skill-dir>/scripts/database.mjs add-dev <namespace> "$V8R_DB_DIR/development-url"
+# Only for an explicit request to rotate the development credential:
+node <skill-dir>/scripts/database.mjs rotate-dev <namespace> "$V8R_DB_DIR/new-development-url"
+```
+
+These use `?environment=development` on the status, add, and rotate endpoints.
+The helper checks that the server explicitly recognizes development before
+mutating anything; deploy the updated control plane first. No `create-dev` claim
+is needed: claim the app once, then add development separately. Development can
+be provisioned even if production has no database.
+
+The database and login are suffixed `_dev`, with a separate password and
+20-connection budget. Production and development cannot connect to one another's
+databases. Run migrations against each environment independently; no production
+data is copied. Store the development URL as server-only `DATABASE_URL` in the
+app's ignored local secret file. If preview deployments need it, install that URL
+in Vercel's preview environment via stdin; never overwrite production's value.
+Keep a recovery copy in the secret manager before removing temporary files.
+
+Apply the same TLS/pool configuration and persistence checks as production.
+Check and rotate the selected environment independently. Development backups
+have the same retention policy under a separate `<namespace>_dev` backup prefix.

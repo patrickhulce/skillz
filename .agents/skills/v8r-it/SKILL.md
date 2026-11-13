@@ -24,6 +24,9 @@ regenerate a DB credential, read [references/database.md](references/database.md
 and use [scripts/database.mjs](scripts/database.mjs). Keep this guidance in the
 skill; do not publish a database docs page or advertise it on v8r.dev.
 
+For an optional isolated development database, use the reference’s `add-dev`,
+`status-dev`, and `rotate-dev` workflow after claiming the project.
+
 For new DB-backed apps: link the Vercel project, claim/provision and install
 `DATABASE_URL`, run migrations, then deploy. This reorders the normal checklist:
 do the database-aware claim before the first build requiring a DB, and skip the

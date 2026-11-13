@@ -4,14 +4,16 @@ import { execFileSync } from "node:child_process";
 import { openSync, writeFileSync, closeSync, unlinkSync } from "node:fs";
 import { resolve } from "node:path";
 
-const [mode, namespace, output, displayName] = process.argv.slice(2);
+const [operation, namespace, output, displayName] = process.argv.slice(2);
+const development = ["status-dev", "add-dev", "rotate-dev"].includes(operation);
+const mode = development ? operation.slice(0, -4) : operation;
 if (
   !["status", "create", "add", "rotate"].includes(mode) ||
   !/^[a-z0-9][a-z0-9-]{1,30}$/.test(namespace ?? "") ||
   (mode !== "status" && !output)
 ) {
   console.error(
-    "Usage: node database.mjs status <namespace> | <create|add|rotate> <namespace> <new-secret-file> [display-name]",
+    "Usage: node database.mjs <status|status-dev> <namespace> | <create|add|rotate|add-dev|rotate-dev> <namespace> <new-secret-file> [display-name]",
   );
   process.exit(2);
 }
@@ -32,6 +34,25 @@ try {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
   }).trim();
+  // Older control-plane releases ignore query parameters. Check explicit support
+  // before any development mutation so an old server cannot rotate production.
+  if (development) {
+    const check = await fetch(
+      new URL(
+        `/api/projects/${namespace}/database?environment=development`,
+        base,
+      ),
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        redirect: "error",
+        signal: AbortSignal.timeout(120_000),
+      },
+    );
+    if (!check.ok || (await check.json()).environment !== "development")
+      throw new Error(
+        "Unexpected database environment support. Deploy the development-database control-plane release first.",
+      );
+  }
   // Reserve the destination before a mutation. Refuse to overwrite a saved URL
   // or follow a pre-existing symlink; the secret file is readable only by owner.
   if (mode !== "status") fd = openSync(resolve(output), "wx", 0o600);
@@ -39,25 +60,28 @@ try {
     mode === "create"
       ? "/api/projects"
       : `/api/projects/${namespace}/database${mode === "rotate" ? "/rotate" : ""}`;
-  const response = await fetch(new URL(path, base), {
-    method: mode === "status" ? "GET" : "POST",
-    redirect: "error",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
+  const response = await fetch(
+    new URL(path + (development ? "?environment=development" : ""), base),
+    {
+      method: mode === "status" ? "GET" : "POST",
+      redirect: "error",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      ...(mode === "create"
+        ? {
+            body: JSON.stringify({
+              namespace,
+              name: displayName || namespace,
+              targetKind: "vercel",
+              database: true,
+            }),
+          }
+        : {}),
+      signal: AbortSignal.timeout(120_000),
     },
-    ...(mode === "create"
-      ? {
-          body: JSON.stringify({
-            namespace,
-            name: displayName || namespace,
-            targetKind: "vercel",
-            database: true,
-          }),
-        }
-      : {}),
-    signal: AbortSignal.timeout(120_000),
-  });
+  );
   if (!response.ok) {
     // Do not emit an arbitrary server response or auto-retry a mutation.
     throw new Error(
@@ -65,6 +89,8 @@ try {
     );
   }
   const body = await response.json();
+  if (development && body.environment !== "development")
+    throw new Error("Unexpected database environment response.");
   if (mode === "status") {
     // Allowlist non-secret fields, even if an unexpected backend returns more.
     const d = body.database;
@@ -99,6 +125,7 @@ try {
       !["postgres:", "postgresql:"].includes(url.protocol) ||
       url.hostname !== "db.v8r.dev" ||
       !url.password ||
+      (development && !url.pathname.endsWith("_dev")) ||
       url.searchParams.get("sslmode") !== "verify-full"
     )
       throw new Error("Unexpected database credential response.");
